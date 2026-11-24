@@ -54,7 +54,7 @@ function Gate() {
   if (!auth.ready) return <div className="loading" role="status">Đang tải…</div>;
   if (!auth.session || !auth.adapter) return <AuthScreen />;
   return (
-    <StoreProvider key={auth.session.id} adapter={auth.adapter}>
+    <StoreProvider key={`${auth.session.id}:${auth.epoch}`} adapter={auth.adapter}>
       <Shell />
     </StoreProvider>
   );

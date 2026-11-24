@@ -31,6 +31,16 @@ Lấy tệp Excel gốc làm chuẩn, web có đủ các phần và làm tốt h
 - Giới hạn trung thực: ai có quyền chạy mã trên máy bạn (phần mềm độc hại, tiện ích trình duyệt xấu) vẫn có thể lấy được dữ liệu khi bạn đang đăng nhập. Mã hóa bảo vệ dữ liệu lưu trên đĩa, không thay thế bảo mật máy.
 - Dữ liệu cũ lưu trước khi có đăng nhập có thể được chuyển vào tài khoản mới (hộp chọn khi tạo tài khoản).
 
+## Đồng bộ giữa các máy (Supabase)
+
+Khi đã cấu hình, đăng nhập cùng tên và mật khẩu trên máy nào cũng thấy dữ liệu của bạn.
+
+- **Bảo mật:** dữ liệu mã hóa ngay trên máy bạn; máy chủ chỉ giữ bản mã hóa và băm của tên đăng nhập. Máy chủ nhận một "token" sinh riêng từ mật khẩu (khác khóa mã hóa), nên không đọc được dữ liệu. Bảng không đọc trực tiếp được (RLS bật, thu hồi quyền); chỉ qua 3 hàm trong `supabase/setup.sql`, sai token 5 lần thì khóa tạm.
+- **Toàn vẹn:** mỗi bản có số phiên bản; ghi lên bản cũ bị từ chối. Xung đột: lấy bản mới nhất của máy chủ, bản trên máy đang dùng được giữ làm dự phòng.
+- **Mất mạng:** vẫn dùng bình thường, tự đồng bộ lại khi có mạng.
+- **Cài đặt một lần:** (1) tạo dự án Supabase miễn phí; (2) dán `supabase/setup.sql` vào SQL Editor rồi Run; (3) điền `url` và `anonKey` (khóa `anon public`, được phép công khai) vào `src/syncConfig.json`; (4) build lại. Để trống `anonKey` thì ứng dụng chạy chỉ trên máy.
+- **Giới hạn:** quên mật khẩu thì không lấy lại được dữ liệu. Người biết tên đăng nhập có thể cố tình nhập sai để khóa tạm tài khoản đó trên máy chủ. Đổi mật khẩu và xóa tài khoản cần có mạng khi bật đồng bộ.
+
 ## Tự động lưu
 
 Mọi thay đổi được lưu sau khoảng 0,3 giây và lưu ngay khi đóng hoặc ẩn tab. Có bản dự phòng tự động; thanh bên hiện trạng thái lưu.

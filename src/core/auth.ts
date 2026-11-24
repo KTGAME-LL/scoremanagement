@@ -100,6 +100,7 @@ export async function decryptJson(dek: CryptoKey, text: string): Promise<unknown
 }
 
 /* ---------- Tài khoản ---------- */
+export interface AccountFields { display: string; salt: string; iter: number; iv: string; wrapped: string }
 interface Account {
   id: string;
   display: string;
@@ -236,7 +237,43 @@ export class AuthService {
     return { id: acc.id, username: acc.display, dek: await importDek(raw), raw };
   }
 
-  async changePassword(username: string, oldPw: string, newPw: string, confirm: string): Promise<void> {
+  /* ----- Đồng bộ: xuất/nhập phần khóa đã bọc của tài khoản (không chứa mật khẩu hay khóa thô) ----- */
+  exportAccount(usernameRaw: string): AccountFields | null {
+    const a = this.accounts()[normalizeUsername(usernameRaw)];
+    return a ? { display: a.display, salt: a.salt, iter: a.iter, iv: a.iv, wrapped: a.wrapped } : null;
+  }
+  async unwrapFields(f: AccountFields, password: string): Promise<Uint8Array | null> {
+    try {
+      if (!Number.isInteger(f.iter) || f.iter < 1000 || f.iter > 5_000_000) return null;
+      const k = await deriveKey(password, unb64(f.salt, 16), f.iter);
+      const raw = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(f.iv, 12) }, k, unb64(f.wrapped)));
+      return raw.length === 32 ? raw : null;
+    } catch {
+      return null;
+    }
+  }
+  /** Tạo hoặc thay tài khoản cục bộ bằng bản từ máy chủ (đã giải được bằng mật khẩu). Giữ id cũ nếu có. */
+  async importAccount(usernameRaw: string, f: AccountFields, raw: Uint8Array): Promise<Session> {
+    const key = normalizeUsername(usernameRaw);
+    const all = this.accounts();
+    const id = all[key]?.id ?? Array.from(rand(16), (x) => x.toString(16).padStart(2, '0')).join('');
+    all[key] = { id, display: String(f.display ?? usernameRaw).slice(0, USERNAME_MAX), salt: f.salt, iter: f.iter, iv: f.iv, wrapped: f.wrapped, created: all[key]?.created ?? new Date(this.now()).toISOString() };
+    this.saveAccounts(all);
+    this.setLock(key, null);
+    return { id, username: all[key].display, dek: await importDek(raw), raw };
+  }
+  removeLocal(usernameRaw: string) {
+    const key = normalizeUsername(usernameRaw);
+    const all = this.accounts();
+    const a = all[key];
+    if (!a) return;
+    delete all[key];
+    this.saveAccounts(all);
+    this.kv.remove(this.dataKey(a.id));
+    this.kv.remove(`${this.dataKey(a.id)}:backup`);
+  }
+
+  async changePassword(username: string, oldPw: string, newPw: string, confirm: string, beforeCommit?: (f: AccountFields) => Promise<void>): Promise<void> {
     const key = normalizeUsername(username);
     const acc = this.accounts()[key];
     if (!acc) throw new AuthError('Không tìm thấy tài khoản.', 'form');
@@ -255,8 +292,10 @@ export class AuthService {
     const iv = rand(12);
     const k = await deriveKey(newPw, salt, this.iterations);
     const wrapped = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, raw));
+    const fields: AccountFields = { display: acc.display, salt: b64(salt), iter: this.iterations, iv: b64(iv), wrapped: b64(wrapped) };
+    if (beforeCommit) await beforeCommit(fields);
     const all = this.accounts();
-    all[key] = { ...acc, salt: b64(salt), iter: this.iterations, iv: b64(iv), wrapped: b64(wrapped) };
+    all[key] = { ...acc, salt: fields.salt, iter: this.iterations, iv: fields.iv, wrapped: fields.wrapped };
     this.saveAccounts(all);
     this.setLock(key, null);
   }

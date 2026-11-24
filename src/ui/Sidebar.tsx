@@ -10,6 +10,15 @@ const SAVE_TEXT: Record<SaveState, string> = {
   saved: 'Đã tự lưu trên máy này',
   error: 'Không lưu được. Hãy xuất tệp dự phòng',
 };
+const SYNC_TEXT: Record<string, string> = {
+  off: 'Chưa đồng bộ',
+  idle: 'Chờ đồng bộ',
+  syncing: 'Đang đồng bộ…',
+  synced: 'Đã đồng bộ giữa các máy',
+  offline: 'Mất mạng, sẽ đồng bộ lại sau',
+  conflict: 'Đã nhận dữ liệu từ máy khác',
+  error: 'Lỗi đồng bộ',
+};
 const THEME_NEXT: Record<Theme, Theme> = { auto: 'light', light: 'dark', dark: 'auto' };
 const THEME_TEXT: Record<Theme, string> = { auto: 'Theo hệ thống', light: 'Sáng', dark: 'Tối' };
 
@@ -103,6 +112,11 @@ export function Sidebar() {
         </button>
       </div>
 
+      {auth.sync.enabled && (
+        <p className={`save sync ${auth.sync.state}`} role="status" title={auth.sync.detail}>
+          <span className="dot" aria-hidden="true" /> {SYNC_TEXT[auth.sync.state]}{auth.sync.detail ? `: ${auth.sync.detail}` : ''}
+        </p>
+      )}
       <p className={`save ${st.saveState}`} role="status" aria-live="polite">
         <span className="dot" aria-hidden="true" /> {SAVE_TEXT[st.saveState]}
       </p>

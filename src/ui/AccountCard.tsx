@@ -23,7 +23,7 @@ export function AccountCard() {
     setBusy(true);
     setMsg(null);
     try {
-      await auth.service.changePassword(name, oldPw, newPw, conf);
+      await auth.changePassword(oldPw, newPw, conf);
       setOld(''); setNew(''); setConf('');
       setMsg({ ok: true, text: 'Đã đổi mật khẩu. Dữ liệu của bạn vẫn nguyên vẹn.' });
     } catch (x) {
@@ -38,8 +38,7 @@ export function AccountCard() {
     if (!(await confirm(`Xóa vĩnh viễn tài khoản “${name}” và toàn bộ dữ liệu điểm? Không thể khôi phục.`, 'Xóa tài khoản', true))) return;
     setBusy(true);
     try {
-      await auth.service.deleteAccount(name, delPw);
-      auth.logout();
+      await auth.deleteAccount(delPw);
     } catch (x) {
       setDelMsg(x instanceof AuthError ? x.message : 'Không xóa được tài khoản.');
       setBusy(false);
@@ -50,7 +49,7 @@ export function AccountCard() {
     <section className="card" id="account-card" aria-labelledby="h-account">
       <h2 id="h-account">Tài khoản và bảo mật</h2>
       <p className="muted small">
-        Đang đăng nhập: <b>{name}</b>. Dữ liệu được mã hóa AES-256 bằng khóa riêng của tài khoản và chỉ lưu trong trình duyệt này.
+        Đang đăng nhập: <b>{name}</b>. Dữ liệu được mã hóa AES-256 bằng khóa riêng của tài khoản và {auth.sync.enabled ? 'đồng bộ giữa các máy (máy chủ chỉ giữ bản đã mã hóa, không đọc được).' : 'chỉ lưu trong trình duyệt này.'}
         {st.warnings.length > 0 && ` Lưu ý khi tải: ${st.warnings[0]}`}
       </p>
       <form className="form" onSubmit={change} noValidate>

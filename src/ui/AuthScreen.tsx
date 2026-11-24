@@ -53,6 +53,8 @@ export function AuthScreen() {
           <button type="button" role="tab" aria-selected={reg} className={reg ? 'on' : ''} onClick={() => { setMode('register'); setErr(null); }}>Tạo tài khoản</button>
         </div>
 
+        {auth.sync.enabled && <p className="muted small">Máy mới? Chọn Đăng nhập bằng tài khoản đã tạo ở máy khác, dữ liệu sẽ tự về.</p>}
+
         <label>
           <span>Tên đăng nhập</span>
           <input

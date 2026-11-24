@@ -37,13 +37,15 @@ for (const f of out.outputFiles) {
 js = js.replace(/<\/script/gi, '<\\/script');
 css = css.replace(/<\/style/gi, '<\\/style');
 
+const cfg = JSON.parse(readFileSync(new URL('../src/syncConfig.json', import.meta.url), 'utf8'));
+const connect = cfg.url && cfg.anonKey && /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(cfg.url) ? cfg.url : "'none'";
 const sha = (s) => `'sha256-${createHash('sha256').update(s, 'utf8').digest('base64')}'`;
 const csp = [
   "default-src 'none'",
   `script-src ${sha(js)}`,
   `style-src ${sha(css)}`,
   "img-src data:",
-  "connect-src 'none'",
+  `connect-src ${connect}`,
   "frame-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
