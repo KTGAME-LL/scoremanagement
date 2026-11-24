@@ -1,11 +1,15 @@
 import { useEffect } from 'react';
 import { StoreProvider, useStore } from '../state/store';
+import { AuthProvider, useAuth } from '../state/auth';
+import { AuthScreen } from './AuthScreen';
 import { ConfirmProvider } from './Confirm';
 import { Sidebar } from './Sidebar';
 import { Overview } from './Overview';
 import { CourseView } from './CourseView';
 import { SettingsView } from './SettingsView';
 import { TargetsView } from './TargetsView';
+import { ProgramView } from './ProgramView';
+import { HelpView } from './HelpView';
 
 function Shell() {
   const st = useStore();
@@ -33,18 +37,11 @@ function Shell() {
         {st.warnings.length > 0 && st.ui.view === 'overview' && (
           <div className="banner warn" role="note">Dữ liệu đã được chuẩn hóa khi tải: {st.warnings.slice(0, 2).join(' ')}</div>
         )}
-        {st.google.linked && st.cloud.status === 'needs-login' && (
-          <div className="banner warn" role="alert">
-            Phiên Google đã hết hạn nên chưa đồng bộ được (dữ liệu vẫn tự lưu trên máy). {st.cloud.message}
-            <button className="btn" onClick={() => void st.googleSignIn()}>Đăng nhập lại</button>
-          </div>
-        )}
-        {st.google.linked && st.cloud.status === 'error' && (
-          <div className="banner warn" role="alert">Chưa đồng bộ được với Google Drive: {st.cloud.message} Dữ liệu vẫn tự lưu trên máy.</div>
-        )}
         {st.ui.view === 'overview' && <Overview />}
         {st.ui.view === 'course' && <CourseView />}
         {st.ui.view === 'targets' && <TargetsView />}
+        {st.ui.view === 'program' && <ProgramView />}
+        {st.ui.view === 'help' && <HelpView />}
         {st.ui.view === 'settings' && <SettingsView />}
       </main>
       {st.toast && <div className="toast" role="status" aria-live="polite">{st.toast}</div>}
@@ -52,12 +49,23 @@ function Shell() {
   );
 }
 
+function Gate() {
+  const auth = useAuth();
+  if (!auth.ready) return <div className="loading" role="status">Đang tải…</div>;
+  if (!auth.session || !auth.adapter) return <AuthScreen />;
+  return (
+    <StoreProvider key={auth.session.id} adapter={auth.adapter}>
+      <Shell />
+    </StoreProvider>
+  );
+}
+
 export function App() {
   return (
     <ConfirmProvider>
-      <StoreProvider>
-        <Shell />
-      </StoreProvider>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
     </ConfirmProvider>
   );
 }

@@ -271,6 +271,8 @@ export function buildWorkbook(data: AppData): Workbook {
     ['Mặc định cộng điểm thưởng', s.bonusDefault ? 'Có' : 'Không'],
     ['Số học kỳ', s.termCount],
     ['Số học kỳ mỗi năm', s.termsPerYear],
+    ['Ký hiệu Đạt', s.passSymbol],
+    ['Ký hiệu Không đạt', s.failSymbol],
   ];
   kv.forEach(([k, v], i) => cf.cell(5 + i, 1, k, body({ bold: true, bg: 'DCECF3' })).cell(5 + i, 2, v, body({ align: 'center' })));
   let q = 5 + kv.length + 1;
@@ -282,6 +284,28 @@ export function buildWorkbook(data: AppData): Workbook {
     const z = i % 2 === 1;
     cf.cell(q, 1, c.from, body({ align: 'center' }, z)).cell(q, 2, c.letter, body({ align: 'center', bold: true }, z)).cell(q, 3, c.gpa4, body({ align: 'center', numFmt: '0.0' }, z)).cell(q, 4, c.rank, body({ align: 'center' }, z));
   });
+
+  /* ===== Thông tin ngành học ===== */
+  const pg = wb.addSheet('Thông tin ngành học').tab('5E8C61');
+  titleBlock(pg, data, 9, 'CHƯƠNG TRÌNH ĐÀO TẠO');
+  [7, 14, 34, 7, 22, 20, 20, 20, 30].forEach((w, i) => pg.width(i + 1, w));
+  headerRow(pg, 5, ['STT', 'Mã môn', 'Tên môn', 'TC', 'Giảng viên', 'Kiểm tra', 'Giữa kỳ', 'Cuối kỳ', 'Ghi chú'], 1, 26);
+  let pr = 5;
+  for (let t = 0; t < s.termCount; t++) {
+    const rows = data.program.filter((x) => x.term === t);
+    if (!rows.length) continue;
+    pr++;
+    pg.cell(pr, 1, termLabel(t, s), S.section);
+    rows.forEach((x, i) => {
+      pr++;
+      const z = i % 2 === 1;
+      const b = body({}, z);
+      pg.cell(pr, 1, i + 1, body({ align: 'center' }, z)).cell(pr, 2, x.code, b).cell(pr, 3, x.name, b).cell(pr, 4, x.credits ?? '', body({ align: 'center' }, z))
+        .cell(pr, 5, x.instructor, b).cell(pr, 6, x.test, b).cell(pr, 7, x.midterm, b).cell(pr, 8, x.final, b).cell(pr, 9, x.note, body({ wrap: true }, z));
+    });
+  }
+  if (pr === 5) pg.cell(6, 1, 'Chưa nhập chương trình đào tạo.', S.sub);
+  pg.freeze(5, 0);
 
   return wb;
 }

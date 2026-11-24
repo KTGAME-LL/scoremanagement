@@ -2,11 +2,11 @@
  * Kiểm tra và làm sạch dữ liệu đọc từ localStorage hoặc file JSON nhập vào.
  * Không tin bất kỳ trường nào: ép kiểu, giới hạn độ dài, giới hạn số lượng, tạo lại id trùng.
  */
-import type { AppData, Course, CourseComponent, ConversionRow, Settings } from './types';
+import type { AppData, Course, CourseComponent, ConversionRow, ProgramCourse, Settings } from './types';
 import { DEFAULT_COMPONENT_LIBRARY, DEFAULT_CONVERSION, defaultData, defaultSettings } from './defaults';
 import { newId } from './id';
 
-export const LIMITS = { courses: 500, components: 12, library: 30, conversion: 20, text: 200, note: 1000, terms: 24 };
+export const LIMITS = { program: 300, courses: 500, components: 12, library: 30, conversion: 20, text: 200, note: 1000, terms: 24 };
 
 type Rec = Record<string, unknown>;
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -111,6 +111,26 @@ export interface SanitizeResult {
   warnings: string[];
 }
 
+function sanitizeProgram(v: unknown, s: Settings, seen: Set<string>): ProgramCourse | null {
+  if (!isRec(v)) return null;
+  let id = str(v.id, 60);
+  if (!id || seen.has(id)) id = newId('prg');
+  seen.add(id);
+  const term = Math.trunc(numOr(v.term, 0, LIMITS.terms - 1, 0));
+  return {
+    id,
+    term: Math.min(term, Math.max(0, s.termCount - 1)),
+    code: str(v.code, 30),
+    name: str(v.name),
+    credits: num(v.credits, 0, 50),
+    instructor: str(v.instructor),
+    test: str(v.test, 60),
+    midterm: str(v.midterm, 60),
+    final: str(v.final, 60),
+    note: str(v.note, LIMITS.note),
+  };
+}
+
 export function sanitizeAppData(raw: unknown): SanitizeResult {
   const warnings: string[] = [];
   if (!isRec(raw)) throw new Error('Tệp không phải dữ liệu hợp lệ.');
@@ -129,7 +149,12 @@ export function sanitizeAppData(raw: unknown): SanitizeResult {
     .filter((c): c is Course => c !== null);
   const dropped = Math.min(rawCourses.length, LIMITS.courses) - courses.length;
   if (dropped > 0) warnings.push(`Bỏ qua ${dropped} môn không đọc được.`);
-  return { data: { version: 1, settings, componentLibrary: lib.length ? lib : [...DEFAULT_COMPONENT_LIBRARY], courses }, warnings };
+  const pseen = new Set<string>();
+  const program = (Array.isArray(raw.program) ? raw.program : [])
+    .slice(0, LIMITS.program)
+    .map((p) => sanitizeProgram(p, settings, pseen))
+    .filter((p): p is ProgramCourse => p !== null);
+  return { data: { version: 1, settings, componentLibrary: lib.length ? lib : [...DEFAULT_COMPONENT_LIBRARY], courses, program }, warnings };
 }
 
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;

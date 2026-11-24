@@ -36,7 +36,7 @@ export function defaultSettings(): Settings {
 }
 
 export function defaultData(): AppData {
-  return { version: 1, settings: defaultSettings(), componentLibrary: [...DEFAULT_COMPONENT_LIBRARY], courses: [] };
+  return { version: 1, settings: defaultSettings(), componentLibrary: [...DEFAULT_COMPONENT_LIBRARY], courses: [], program: [] };
 }
 
 export function makeComponent(name: string, weight: number | null, enabled = true, joinPrev = false): CourseComponent {

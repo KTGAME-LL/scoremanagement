@@ -1,4 +1,4 @@
-// CSP chỉ cho phép: mã đã đóng gói (băm SHA-256), dịch vụ đăng nhập Google và Google Drive API.
+// CSP chỉ cho phép đúng đoạn mã đã đóng gói (băm SHA-256), không cho kết nối mạng.
 // Đóng gói toàn bộ ứng dụng thành MỘT tệp HTML (diem-app.html) chạy offline, không cần máy chủ.
 // Chạy: node scripts/build-single.mjs   (cần esbuild, react, react-dom đã cài)
 import { createRequire } from 'node:module';
@@ -40,11 +40,11 @@ css = css.replace(/<\/style/gi, '<\\/style');
 const sha = (s) => `'sha256-${createHash('sha256').update(s, 'utf8').digest('base64')}'`;
 const csp = [
   "default-src 'none'",
-  `script-src ${sha(js)} https://accounts.google.com/gsi/client`,
-  `style-src ${sha(css)} https://accounts.google.com/gsi/style`,
+  `script-src ${sha(js)}`,
+  `style-src ${sha(css)}`,
   "img-src data:",
-  "connect-src https://www.googleapis.com https://accounts.google.com/gsi/",
-  "frame-src https://accounts.google.com/gsi/",
+  "connect-src 'none'",
+  "frame-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
 ].join('; ');

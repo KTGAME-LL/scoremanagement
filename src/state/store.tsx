@@ -1,16 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { AppData, Course, CourseComponent, Settings } from '../core/types';
+import type { AppData, Course, CourseComponent, ProgramCourse, Settings } from '../core/types';
 import { defaultData, makeComponent, newCourse, PRESETS } from '../core/defaults';
 import { evaluateAll, type Evaluated } from '../core/stats';
 import { LocalStorageAdapter, type StorageAdapter } from '../core/storage';
 import { newId } from '../core/id';
-import { CloudSync, type CloudState } from '../core/cloudSync';
-import { GoogleAuth, isValidClientId, originSupported } from '../core/google';
-import { userInfo } from '../core/drive';
-import { DEFAULT_GOOGLE_CLIENT_ID } from '../config';
-import { useChoose } from '../ui/Confirm';
 
-export type View = 'overview' | 'course' | 'targets' | 'settings';
+export type View = 'overview' | 'course' | 'targets' | 'program' | 'help' | 'settings';
 export type Theme = 'auto' | 'light' | 'dark';
 export type SaveState = 'saving' | 'saved' | 'error';
 
@@ -29,36 +24,6 @@ interface History {
   at: number;
 }
 
-export interface GoogleInfo {
-  clientId: string;
-  supported: boolean;
-  linked: boolean;
-  user: { name: string; email: string } | null;
-}
-
-const GOOGLE_KEY = 'diem-app:google';
-function loadGoogle(): GoogleInfo {
-  const g: GoogleInfo = { clientId: DEFAULT_GOOGLE_CLIENT_ID, supported: originSupported(), linked: false, user: null };
-  try {
-    const r = JSON.parse(localStorage.getItem(GOOGLE_KEY) || '{}');
-    if (typeof r.clientId === 'string' && isValidClientId(r.clientId)) g.clientId = r.clientId;
-    if (r.linked === true && g.clientId) {
-      g.linked = true;
-      if (typeof r.email === 'string') g.user = { name: String(r.name ?? '').slice(0, 120), email: r.email.slice(0, 120) };
-    }
-  } catch {
-    /* mặc định */
-  }
-  return g;
-}
-function saveGoogle(g: GoogleInfo) {
-  try {
-    localStorage.setItem(GOOGLE_KEY, JSON.stringify({ clientId: g.clientId, linked: g.linked, name: g.user?.name ?? '', email: g.user?.email ?? '' }));
-  } catch {
-    /* không quan trọng */
-  }
-}
-
 export interface Store {
   data: AppData;
   ev: Evaluated[];
@@ -70,12 +35,7 @@ export interface Store {
   canUndo: boolean;
   canRedo: boolean;
   toast: string | null;
-  cloud: CloudState;
-  google: GoogleInfo;
-  googleSignIn: () => Promise<void>;
-  googleSignOut: () => void;
-  syncNow: () => void;
-  setGoogleClientId: (id: string) => boolean;
+  flushNow: () => Promise<void>;
   notify: (msg: string) => void;
   go: (view: View, courseId?: string | null, focusId?: string | null) => void;
   setTheme: (t: Theme) => void;
@@ -94,6 +54,10 @@ export interface Store {
   applyPreset: (courseId: string, presetId: string) => void;
   patchSettings: (patch: Partial<Settings>, key?: string) => void;
   setLibrary: (lib: string[]) => void;
+  addProgram: (term: number) => void;
+  patchProgram: (id: string, patch: Partial<ProgramCourse>, key?: string) => void;
+  deleteProgram: (id: string) => void;
+  addProgramToTranscript: (ids: string[]) => number;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -108,7 +72,7 @@ function loadUi(): Ui {
   const d: Ui = { view: 'overview', courseId: null, focusId: null, theme: 'auto' };
   try {
     const r = JSON.parse(localStorage.getItem(UI_KEY) || '{}');
-    if (['overview', 'course', 'targets', 'settings'].includes(r.view)) d.view = r.view;
+    if (['overview', 'course', 'targets', 'program', 'help', 'settings'].includes(r.view)) d.view = r.view;
     if (typeof r.courseId === 'string') d.courseId = r.courseId.slice(0, 60);
     if (['auto', 'light', 'dark'].includes(r.theme)) d.theme = r.theme;
   } catch {
@@ -125,6 +89,8 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
   const [h, setH] = useState<History>({ data: defaultData(), past: [], future: [], key: null, at: 0 });
   const [ready, setReady] = useState(false);
   const [fresh, setFresh] = useState(true);
+  const dataRef = useRef(h.data);
+  dataRef.current = h.data;
   const [warnings, setWarnings] = useState<string[]>([]);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [ui, setUi] = useState<Ui>(loadUi);
@@ -134,15 +100,6 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
   const justLoaded = useRef(false);
   const dirty = useRef(false);
   const latest = useRef<AppData>(h.data);
-  const suppressPush = useRef(false);
-  const choose = useChoose();
-  const [google, setGoogle] = useState<GoogleInfo>(loadGoogle);
-  const googleRef = useRef(google);
-  googleRef.current = google;
-  const [cloud, setCloud] = useState<CloudState>({ status: 'signed-out', message: '', lastSync: null });
-  const auth = useRef<GoogleAuth | null>(null);
-  const sync = useRef<CloudSync | null>(null);
-  const pushTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     let alive = true;
@@ -184,17 +141,7 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
     dirty.current = true;
     setSaveState('saving');
     const t = window.setTimeout(() => {
-      void flush().then(() => {
-        if (suppressPush.current) {
-          suppressPush.current = false;
-          return;
-        }
-        const st = sync.current;
-        if (st && googleRef.current.linked) {
-          window.clearTimeout(pushTimer.current);
-          pushTimer.current = window.setTimeout(() => void st.push(), 1500);
-        }
-      });
+      void flush();
     }, 300);
     return () => window.clearTimeout(t);
   }, [h.data, flush]);
@@ -213,15 +160,6 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
       window.removeEventListener('beforeunload', onLeave);
     };
   }, [flush]);
-
-  // Quay lại tab: lấy thay đổi từ thiết bị khác nếu có.
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void sync.current?.pull(dirty.current);
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, []);
 
   useEffect(() => {
     try {
@@ -256,100 +194,7 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
     courses: d.courses.map((c) => (c.id === id ? fn(c) : c)),
   });
 
-  const buildSync = useCallback(
-    (clientId: string) => {
-      const a = new GoogleAuth(clientId);
-      if (googleRef.current.user?.email) a.hint = googleRef.current.user.email;
-      auth.current = a;
-      sync.current = new CloudSync(
-        {
-          getLocal: () => ({ data: latest.current, hasData: latest.current.courses.length > 0 }),
-          applyRemote: (d) => {
-            suppressPush.current = true;
-            commit(() => d);
-            setFresh(false);
-            setUi((u) => ({ ...u, courseId: d.courses.some((c) => c.id === u.courseId) ? u.courseId : d.courses[0]?.id ?? null }));
-          },
-          choose: (i) =>
-            choose('Dữ liệu ở hai nơi khác nhau', `Google Drive: ${i.remoteCourses} môn${i.remoteSavedAt ? ` (lưu lúc ${new Date(i.remoteSavedAt).toLocaleString('vi-VN')})` : ''}. Máy này: ${i.localCourses} môn. Chọn bản muốn giữ, bản còn lại sẽ bị ghi đè (bạn vẫn có thể Hoàn tác trên máy này).`, {
-              remote: 'Dùng bản trên Google Drive',
-              local: 'Giữ bản trên máy này và ghi đè Drive',
-              cancel: 'Chưa quyết định (tạm dừng đồng bộ)',
-            }),
-          onState: setCloud,
-        },
-        (interactive) => (a.hasToken() ? a.getToken(false) : interactive ? a.signIn() : a.getToken(false)),
-      );
-      return sync.current;
-    },
-    [commit, choose],
-  );
-
-  // Tự kết nối lại khi mở ứng dụng nếu trước đó đã đăng nhập.
-  useEffect(() => {
-    if (!ready) return;
-    const g = googleRef.current;
-    if (g.linked && g.clientId && g.supported && !sync.current) {
-      void buildSync(g.clientId).connect(false);
-    }
-  }, [ready, buildSync]);
-
-  const googleApi = useMemo(
-    () => ({
-      googleSignIn: async () => {
-        const g = googleRef.current;
-        if (!g.clientId) return notify('Hãy dán Client ID của Google trong mục Cấu hình trước.');
-        if (!g.supported) return notify('Đăng nhập Google chỉ hoạt động khi mở ứng dụng qua địa chỉ https (ví dụ GitHub Pages).');
-        try {
-          const s = sync.current && auth.current ? sync.current : buildSync(g.clientId);
-          const a = auth.current as GoogleAuth;
-          const token = await a.signIn();
-          const u = await userInfo((...x) => fetch(...x), token).catch(() => ({ name: '', email: '' }));
-          a.hint = u.email;
-          const next: GoogleInfo = { ...g, linked: true, user: u.email ? u : g.user };
-          saveGoogle(next);
-          setGoogle(next);
-          googleRef.current = next;
-          await s.connect(true);
-        } catch (e) {
-          notify(e instanceof Error ? e.message : 'Đăng nhập Google không thành công.');
-          setCloud((c) => ({ ...c, status: googleRef.current.linked ? 'needs-login' : 'signed-out', message: e instanceof Error ? e.message : '' }));
-        }
-      },
-      googleSignOut: () => {
-        window.clearTimeout(pushTimer.current);
-        sync.current?.disconnect();
-        auth.current?.signOut();
-        auth.current = null;
-        sync.current = null;
-        const next: GoogleInfo = { ...googleRef.current, linked: false, user: null };
-        saveGoogle(next);
-        setGoogle(next);
-        googleRef.current = next;
-        notify('Đã đăng xuất Google. Dữ liệu vẫn còn trên máy này và trên Drive.');
-      },
-      syncNow: () => {
-        if (!sync.current) return;
-        void flush().then(() => sync.current?.push());
-      },
-      setGoogleClientId: (id: string): boolean => {
-        const v = id.trim();
-        if (v && !isValidClientId(v)) return false;
-        sync.current?.disconnect();
-        auth.current?.signOut();
-        auth.current = null;
-        sync.current = null;
-        const next: GoogleInfo = { ...googleRef.current, clientId: v, linked: false, user: null };
-        saveGoogle(next);
-        setGoogle(next);
-        googleRef.current = next;
-        return true;
-      },
-    }),
-    [buildSync, notify, flush],
-  );
-
-  const api = useMemo<Omit<Store, 'data' | 'ev' | 'ui' | 'ready' | 'fresh' | 'warnings' | 'saveState' | 'canUndo' | 'canRedo' | 'toast' | 'cloud' | 'google' | 'googleSignIn' | 'googleSignOut' | 'syncNow' | 'setGoogleClientId'>>(
+  const api = useMemo<Omit<Store, 'data' | 'ev' | 'ui' | 'ready' | 'fresh' | 'warnings' | 'saveState' | 'canUndo' | 'canRedo' | 'toast' | 'flushNow'>>(
     () => ({
       notify,
       go: (view, courseId, focusId) =>
@@ -432,11 +277,45 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
       },
       patchSettings: (patch, key) => commit((d) => ({ ...d, settings: { ...d.settings, ...patch } }), key ? `s:${key}` : null),
       setLibrary: (lib) => commit((d) => ({ ...d, componentLibrary: lib })),
+      addProgram: (term) =>
+        commit((d) =>
+          d.program.length >= 300
+            ? d
+            : { ...d, program: [...d.program, { id: newId('prg'), term, code: '', name: '', credits: null, instructor: '', test: '', midterm: '', final: '', note: '' }] },
+        ),
+      patchProgram: (id, patch, key) =>
+        commit((d) => ({ ...d, program: d.program.map((p) => (p.id === id ? { ...p, ...patch } : p)) }), key ? `p:${id}:${key}` : null),
+      deleteProgram: (id) => commit((d) => ({ ...d, program: d.program.filter((p) => p.id !== id) })),
+      addProgramToTranscript: (ids) => {
+        const d0 = dataRef.current;
+        const keyOf = (code: string, name: string, term: number) => (code ? `c:${code.toLowerCase()}` : `n:${name.toLowerCase()}:${term}`);
+        const have = new Set(d0.courses.map((c) => keyOf(c.code, c.name, c.term)));
+        const picked: ProgramCourse[] = [];
+        for (const p of d0.program) {
+          if (!ids.includes(p.id) || (!p.name && !p.code)) continue;
+          const k = keyOf(p.code, p.name, p.term);
+          if (have.has(k) || d0.courses.length + picked.length >= 500) continue;
+          have.add(k);
+          picked.push(p);
+        }
+        if (picked.length) {
+          commit((d) => ({
+            ...d,
+            courses: [
+              ...d.courses,
+              ...picked.map((p) => ({ ...newCourse(p.term, d.componentLibrary), code: p.code, name: p.name, credits: p.credits, instructor: p.instructor, note: p.note })),
+            ].slice(0, 500),
+          }));
+        }
+        notify(picked.length ? `Đã thêm ${picked.length} môn vào bảng điểm` : 'Các môn này đã có trong bảng điểm');
+        return picked.length;
+      },
     }),
     [commit, notify],
   );
 
   const ev = useMemo(() => evaluateAll(h.data), [h.data]);
+  const flushNow = flush;
   const value: Store = {
     ...api,
     data: h.data,
@@ -449,9 +328,7 @@ export function StoreProvider({ children, adapter }: { children: ReactNode; adap
     canUndo: h.past.length > 0,
     canRedo: h.future.length > 0,
     toast,
-    cloud,
-    google,
-    ...googleApi,
+    flushNow,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

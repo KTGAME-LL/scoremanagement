@@ -24,6 +24,3 @@ export function toCsv(data: AppData): string {
   return '﻿' + [head, ...rows].map((r) => r.map((c) => csvCell(c as string | number | null)).join(',')).join('\r\n');
 }
 
-export function toJson(data: AppData): string {
-  return JSON.stringify(data, null, 2);
-}

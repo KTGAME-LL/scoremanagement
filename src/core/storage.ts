@@ -3,7 +3,7 @@ import { defaultData } from './defaults';
 import { sanitizeAppData } from './schema';
 
 /**
- * Lớp lưu trữ tách riêng để sau này gắn Firebase/Google đăng nhập
+ * Lớp lưu trữ tách riêng để sau này gắn dịch vụ khác
  * chỉ cần viết thêm một adapter có cùng giao diện này.
  */
 export interface StorageAdapter {

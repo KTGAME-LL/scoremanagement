@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { useStore } from '../state/store';
-import { termLabel, totals } from '../core/stats';
+import { termLabel, termStats, totals, yearStats } from '../core/stats';
 import { ProgressCharts } from './Progress';
 import { fmt } from './format';
 import type { Level } from '../core/types';
@@ -12,6 +12,8 @@ export function Overview() {
   const { data, ev } = st;
   const s = data.settings;
   const tot = useMemo(() => totals(ev, s), [ev, s]);
+  const tstat = useMemo(() => termStats(ev, s), [ev, s]);
+  const ystat = useMemo(() => yearStats(ev, s), [ev, s]);
 
   if (!data.courses.length) {
     return (
@@ -25,6 +27,9 @@ export function Overview() {
   }
 
   const usedTerms = new Set(data.courses.map((c) => c.term));
+  const errN = ev.filter((e) => e.result.status.level === 'error').length;
+  const warnN = ev.filter((e) => e.result.status.level === 'warn').length;
+  const outN = ev.filter((e) => e.course.term >= s.termCount).length;
   const byTerm = [...usedTerms].sort((a, b) => a - b);
 
   return (
@@ -37,11 +42,41 @@ export function Overview() {
         <div className="stat"><span>Môn đã có điểm</span><strong>{tot.graded} / {tot.courses}</strong></div>
       </div>
 
+      <div className={`banner ${errN ? 'err' : warnN || outN ? 'warn' : 'ok'}`} role="status">
+        {errN ? `${errN} môn có lỗi cần sửa.` : ''} {warnN ? `${warnN} môn cần xem lại.` : ''} {outN ? `${outN} môn thuộc học kỳ chưa kích hoạt trong Cấu hình.` : ''}
+        {!errN && !warnN && !outN ? 'Tất cả môn đều hợp lệ.' : ''}
+      </div>
+
+      <section className="card">
+        <h2>Thống kê theo học kỳ và năm</h2>
+        <div className="table-wrap">
+          <table className="tbl">
+            <thead><tr><th>Học kỳ</th><th className="r">Số môn</th><th className="r">TC tính điểm</th><th className="r">TB thang {s.scaleMax}</th><th className="r">TB thang 4</th></tr></thead>
+            <tbody>
+              {ystat.map((y) => (
+                <Fragment key={y.year}>
+                  {tstat.filter((t) => t.year === y.year).map((t) => (
+                    <tr key={t.term}>
+                      <td>{termLabel(t.term, s)}</td><td className="r">{t.courses}</td><td className="r">{t.credits || '·'}</td>
+                      <td className="r">{t.gpa10 === null ? '·' : fmt(t.gpa10, s.gpaDecimals)}</td><td className="r">{t.gpa4 === null ? '·' : fmt(t.gpa4, s.gpaDecimals)}</td>
+                    </tr>
+                  ))}
+                  <tr key={`y${y.year}`} className="sum">
+                    <td><strong>Cả {s.yearLabel.toLowerCase()} {y.year + 1}</strong></td><td /><td />
+                    <td className="r"><strong>{y.gpa10 === null ? '·' : fmt(y.gpa10, s.gpaDecimals)}</strong></td><td className="r"><strong>{y.gpa4 === null ? '·' : fmt(y.gpa4, s.gpaDecimals)}</strong></td>
+                  </tr>
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <ProgressCharts />
 
       {byTerm.map((t) => (
         <section className="card" key={t}>
-          <h2>{termLabel(t, s)}</h2>
+          <h2>{termLabel(t, s)}{t >= s.termCount ? ' (chưa kích hoạt trong Cấu hình)' : ''}</h2>
           <div className="table-wrap">
             <table className="tbl">
               <thead>

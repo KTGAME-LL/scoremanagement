@@ -8,11 +8,11 @@ const csp: Plugin = {
   transformIndexHtml(html) {
     const policy = [
       "default-src 'none'",
-      "script-src 'self' https://accounts.google.com/gsi/client",
-      "style-src 'self' https://accounts.google.com/gsi/style",
+      "script-src 'self'",
+      "style-src 'self'",
       "img-src 'self' data:",
-      'connect-src https://www.googleapis.com https://accounts.google.com/gsi/',
-      'frame-src https://accounts.google.com/gsi/',
+      "connect-src 'none'",
+      "frame-src 'none'",
       "base-uri 'none'",
       "form-action 'none'",
     ].join('; ');

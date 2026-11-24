@@ -68,11 +68,27 @@ export interface Course {
   target: Target;
 }
 
+/** Học phần trong chương trình đào tạo của ngành (sheet "Thông tin ngành học"). */
+export interface ProgramCourse {
+  id: string;
+  term: number;
+  code: string;
+  name: string;
+  credits: number | null;
+  instructor: string;
+  /** Hình thức kiểm tra, giữa kỳ, cuối kỳ (ví dụ: Trắc nghiệm, Tự luận, Vấn đáp). */
+  test: string;
+  midterm: string;
+  final: string;
+  note: string;
+}
+
 export interface AppData {
   version: 1;
   settings: Settings;
   componentLibrary: string[];
   courses: Course[];
+  program: ProgramCourse[];
 }
 
 export type Level = 'ok' | 'info' | 'warn' | 'error';

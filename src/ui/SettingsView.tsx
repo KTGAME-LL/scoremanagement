@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { isValidClientId } from '../core/google';
+import { AccountCard } from './AccountCard';
 import { useStore } from '../state/store';
 import { useConfirm } from './Confirm';
 import { NumberField } from './NumberField';
@@ -12,11 +12,10 @@ export function SettingsView() {
   const s = st.data.settings;
   const lib = st.data.componentLibrary;
   const [newName, setNewName] = useState('');
-  const [cid, setCid] = useState(st.google.clientId);
-  const cidBad = cid.trim() !== '' && !isValidClientId(cid.trim());
   useEffect(() => {
     if (st.ui.focusId) document.getElementById(st.ui.focusId)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [st.ui.focusId]);
+
   const p = (patch: Partial<Settings>, key?: string) => st.patchSettings(patch, key);
   const stu = (k: keyof Settings['student'], v: string) => p({ student: { ...s.student, [k]: v.slice(0, 120) } }, `stu-${k}`);
 
@@ -28,43 +27,7 @@ export function SettingsView() {
     <div className="stack">
       <h1>Cấu hình</h1>
 
-      <section className="card" id="google-card" aria-labelledby="h-google">
-        <h2 id="h-google">Đăng nhập Google và đồng bộ</h2>
-        <p className="muted small">
-          Khi đăng nhập, dữ liệu được lưu thêm vào một thư mục ẩn của ứng dụng trong Google Drive của bạn, để dùng trên nhiều máy và không bị mất. Ứng dụng chỉ xin quyền thư mục ẩn này (không đọc được tệp khác) cùng tên và email để hiển thị.
-        </p>
-        <div className="form">
-          <label className="w3">
-            <span>Client ID của Google</span>
-            <input value={cid} maxLength={200} spellCheck={false} autoComplete="off" placeholder="123456789012-abc...xyz.apps.googleusercontent.com" aria-invalid={cidBad || undefined} onChange={(e) => setCid(e.target.value)} />
-          </label>
-        </div>
-        {cidBad && <p className="status error">Client ID chưa đúng dạng (…apps.googleusercontent.com).</p>}
-        <div className="row wrap add">
-          <button
-            className="btn primary"
-            disabled={cidBad || cid.trim() === st.google.clientId}
-            onClick={() => (st.setGoogleClientId(cid) ? st.notify(cid.trim() ? 'Đã lưu Client ID. Bấm Đăng nhập Google ở thanh bên.' : 'Đã xóa Client ID.') : st.notify('Client ID không hợp lệ.'))}
-          >
-            Lưu Client ID
-          </button>
-          {st.google.clientId && !st.google.linked && (
-            <button className="btn" disabled={!st.google.supported} onClick={() => void st.googleSignIn()}>Đăng nhập Google</button>
-          )}
-        </div>
-        {!st.google.supported && <p className="status warn">Bạn đang mở tệp trực tiếp trên máy. Google chỉ cho đăng nhập khi trang chạy qua địa chỉ https (ví dụ GitHub Pages). Phần nhập dữ liệu vẫn dùng bình thường, và dữ liệu vẫn tự lưu trên máy.</p>}
-        <details className="help">
-          <summary>Cách lấy Client ID (làm một lần, miễn phí)</summary>
-          <ol>
-            <li>Vào console.cloud.google.com, tạo một dự án mới.</li>
-            <li>Mục “APIs &amp; Services”, bật “Google Drive API”.</li>
-            <li>Mục “OAuth consent screen”: chọn External, điền tên ứng dụng và email, thêm tài khoản của bạn vào “Test users”.</li>
-            <li>Mục “Credentials”, chọn Create credentials, rồi OAuth client ID, loại “Web application”.</li>
-            <li>Ở “Authorized JavaScript origins” thêm địa chỉ trang của bạn, ví dụ https://tên-bạn.github.io (chỉ phần gốc, không có đường dẫn).</li>
-            <li>Sao chép Client ID (dạng …apps.googleusercontent.com) dán vào ô trên, bấm Lưu Client ID.</li>
-          </ol>
-        </details>
-      </section>
+      <AccountCard />
 
       <section className="card">
         <h2>Thông tin sinh viên</h2>
@@ -84,6 +47,8 @@ export function SettingsView() {
           <label><span>Số lẻ điểm trung bình</span><NumberField label="Số lẻ điểm trung bình" min={0} max={3} value={s.gpaDecimals} onChange={(v) => v !== null && p({ gpaDecimals: Math.round(v) }, 'gd')} /></label>
           <label><span>Điểm đạt học phần (tối thiểu)</span><NumberField label="Điểm đạt" min={0} max={s.scaleMax} value={s.passScore} onChange={(v) => v !== null && p({ passScore: v }, 'ps')} /></label>
           <label><span>Điểm đạt môn chỉ cần “Đạt”</span><NumberField label="Điểm đạt môn chỉ cần đạt" min={0} max={s.scaleMax} value={s.passOnlyScore} onChange={(v) => v !== null && p({ passOnlyScore: v }, 'pos')} /></label>
+          <label><span>Ký hiệu Đạt</span><input value={s.passSymbol} maxLength={6} onChange={(e) => p({ passSymbol: e.target.value }, 'psym')} /></label>
+          <label><span>Ký hiệu Không đạt</span><input value={s.failSymbol} maxLength={6} onChange={(e) => p({ failSymbol: e.target.value }, 'fsym')} /></label>
           <label className="check-line w2">
             <input type="checkbox" checked={s.failCountsInGpa} onChange={(e) => p({ failCountsInGpa: e.target.checked })} />
             <span>Môn không đạt vẫn tính vào điểm trung bình</span>
@@ -100,6 +65,7 @@ export function SettingsView() {
         <div className="form">
           <label><span>Tổng số học kỳ</span><NumberField label="Tổng số học kỳ" min={1} max={24} value={s.termCount} onChange={(v) => v && p({ termCount: Math.round(v) }, 'tc')} /></label>
           <label><span>Số học kỳ mỗi năm</span><NumberField label="Số học kỳ mỗi năm" min={1} max={4} value={s.termsPerYear} onChange={(v) => v && p({ termsPerYear: Math.round(v) }, 'tpy')} /></label>
+          <label><span>Số năm học (tự tính)</span><input readOnly value={Math.ceil(s.termCount / s.termsPerYear)} aria-label="Số năm học" /></label>
           <label><span>Tên “năm”</span><input value={s.yearLabel} maxLength={20} onChange={(e) => p({ yearLabel: e.target.value }, 'yl')} /></label>
           {Array.from({ length: s.termsPerYear }, (_, i) => (
             <label key={i}><span>Tên học kỳ {i + 1}</span>
